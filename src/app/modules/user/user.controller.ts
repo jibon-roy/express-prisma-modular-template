@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { NextFunction, Request, Response } from "express";
 import createHttpError from "http-errors";
 import { errResponse, successResponse } from "../../config/response";
+import NodeCache from "node-cache";
 
 const prisma = new PrismaClient();
 
@@ -82,19 +83,30 @@ export const getSingleUserById = async (
   }
 };
 
+const cache = new NodeCache({ stdTTL: 60 }); // Set TTL (Time-To-Live) to 60 seconds
+
 export const getUsersByName = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   const { name } = req.body;
-  //   console.log(req.body);
 
   // Basic validation
   if (!name) {
     return res.status(400).json({
       statusCode: 400,
       message: "Name parameter is required",
+    });
+  }
+
+  // Check cache first
+  const cachedUsers = cache.get(name);
+  if (cachedUsers) {
+    return successResponse(res, {
+      message: "Users fetched from cache",
+      statusCode: 200,
+      payload: cachedUsers,
     });
   }
 
@@ -107,6 +119,9 @@ export const getUsersByName = async (
         },
       },
     });
+
+    // Store the result in the cache
+    cache.set(name, users);
 
     return successResponse(res, {
       message: "Users fetched successfully",
